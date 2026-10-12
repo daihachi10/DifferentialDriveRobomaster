@@ -32,6 +32,10 @@ OPTIONS_BUTTON_MASK = 0x40
 # STM32のwatchdogは250 msなので、それより十分短い50 ms周期でUSB送信する。
 USB_SEND_INTERVAL_SECONDS = 0.05
 
+# 旋回は走行速度の設定から独立させる。左右スティックを最大まで倒した
+# ときの旋回入力は常にこの値になる。
+TURN_MAX_RPM = 4000
+
 
 @dataclass(frozen=True)
 class ControllerPacket:
@@ -119,7 +123,7 @@ def stick_x_to_rpm(axis_byte: int, max_rpm: int, deadzone: float) -> int:
 def mix_arcade_rpms(
     forward_rpm: int,
     turn_rpm: int,
-    max_rpm: int,
+    wheel_limit_rpm: int,
 ) -> tuple[int, int]:
     """前後入力と旋回入力を、左輪ID1・右輪ID2へ混合する。
 
@@ -131,8 +135,8 @@ def mix_arcade_rpms(
     rpm_id2 = forward_rpm - turn_rpm
     largest = max(abs(rpm_id1), abs(rpm_id2))
 
-    if largest > max_rpm:
-        scale = max_rpm / largest
+    if largest > wheel_limit_rpm:
+        scale = wheel_limit_rpm / largest
         rpm_id1 = int(round(rpm_id1 * scale))
         rpm_id2 = int(round(rpm_id2 * scale))
 
@@ -176,10 +180,10 @@ class MotorCommandState:
                 packet.left_y, self.max_rpm, self.deadzone
             )
             turn_rpm = stick_x_to_rpm(
-                packet.right_x, self.max_rpm, self.deadzone
+                packet.right_x, TURN_MAX_RPM, self.deadzone
             )
             mixed_id1, mixed_id2 = mix_arcade_rpms(
-                forward_rpm, turn_rpm, self.max_rpm
+                forward_rpm, turn_rpm, max(self.max_rpm, TURN_MAX_RPM)
             )
 
             # 実機のCAN ID配置が左右逆なので、ID1/ID2を入れ替えて送る。
@@ -460,7 +464,7 @@ def parse_arguments() -> argparse.Namespace:
         "--max-rpm",
         type=int,
         default=1500,
-        help="フルスティック時のモーター軸RPM（減速前、最大12000）",
+        help="前後フルスティック時のモーター軸RPM（0～12000。旋回は常に最大4000）",
     )
     parser.add_argument(
         "--max-current", type=int, default=3000,
@@ -487,8 +491,8 @@ def parse_arguments() -> argparse.Namespace:
     )
     args = parser.parse_args()
 
-    if not 1 <= args.max_rpm <= 12000:
-        parser.error("--max-rpmは1～12000にしてください")
+    if not 0 <= args.max_rpm <= 12000:
+        parser.error("--max-rpmは0～12000にしてください")
     if not 1 <= args.max_current <= 5000:
         parser.error("--max-currentは1～5000にしてください")
     if not 0.0 <= args.deadzone < 1.0:

@@ -32,7 +32,7 @@ python3 controller_motor_receiver.py --max-rpm 3000 --max-current 4000
 
 初回は車輪を浮かせて確認してください。
 
-- `--max-rpm`: フルスティック時のモーター軸目標RPM（1～12000）
+- `--max-rpm`: 前後フルスティック時のモーター軸目標RPM（0～12000）。旋回はこの値と無関係に最大4000 RPM
 - `--max-current`: PID出力の電流上限（1～5000）
 - `--port`: PCまたはスマホから受けるTCPポート（既定5001）
 - `--usb-device`: STM32のUSB VCPを指定する場合のデバイス名。既定は自動検出
@@ -75,8 +75,13 @@ git pull --ff-only
 Androidアプリの「Pi側プログラムを自動起動」をONにすると、SSHで次を実行します。
 
 ```bash
-python3 -u "$HOME/DifferentialDriveRobomaster/controller_motor_receiver.py"
+python3 -u "$HOME/DifferentialDriveRobomaster/controller_motor_receiver.py" \
+  --max-rpm 12000 --max-current 4000
 ```
+
+アプリの「速度上限」はこの`--max-rpm`へ変換されます（100% = 12000 RPM）。
+旋回は常に最大4000 RPMです。アプリから起動せず手動で起動する場合も、前後の上限だけを
+`--max-rpm`で指定し、旋回上限は変更されません。
 
 手動で受信プログラムを起動している場合は、アプリ側の自動起動をOFFにしてください。
 
