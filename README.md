@@ -36,7 +36,8 @@ python3 controller_motor_receiver.py --max-rpm 3000 --max-current 4000
 - `--max-current`: PID出力の電流上限（1～5000）
 - `--port`: PCまたはスマホから受けるTCPポート（既定5001）
 - `--usb-device`: STM32のUSB VCPを指定する場合のデバイス名。既定は自動検出
-- `--invert-id1` / `--invert-id2`: 指定したC610の回転方向だけ反転
+- `--invert-id1`: C610 ID1の回転方向だけ反転
+- ID2は実機の取付方向に合わせて既定で符号反転。元に戻す場合だけ`--normal-id2`
 
 例:
 

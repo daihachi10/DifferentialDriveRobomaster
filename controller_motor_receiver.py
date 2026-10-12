@@ -151,7 +151,8 @@ class MotorCommandState:
         max_rpm: int,
         deadzone: float,
         invert_id1: bool = False,
-        invert_id2: bool = False,
+        # 実機のID2は回転方向が逆なので、既定で符号を反転する。
+        invert_id2: bool = True,
     ) -> None:
         self.max_rpm = max_rpm
         self.deadzone = deadzone
@@ -487,7 +488,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--invert-id2",
         action="store_true",
-        help="C610 ID 2（右輪）の回転方向だけ反転する",
+        default=True,
+        help="C610 ID 2（右輪）の回転方向を反転する（既定で有効）",
+    )
+    parser.add_argument(
+        "--normal-id2",
+        dest="invert_id2",
+        action="store_false",
+        help="ID2の符号反転を無効にする",
     )
     args = parser.parse_args()
 
