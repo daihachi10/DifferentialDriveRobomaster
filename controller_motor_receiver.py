@@ -32,7 +32,7 @@ OPTIONS_BUTTON_MASK = 0x40
 # STM32のwatchdogは250 msなので、それより十分短い50 ms周期でUSB送信する。
 USB_SEND_INTERVAL_SECONDS = 0.05
 
-# 旋回は走行速度の設定から独立させる。左右スティックを最大まで倒した
+# 旋回は走行速度の設定から独立させる。左スティックを左右へ最大まで倒した
 # ときの旋回入力は常にこの値になる。
 TURN_MAX_RPM = 4000
 
@@ -176,12 +176,12 @@ class MotorCommandState:
         if self.emergency_stopped:
             self.stop()
         else:
-            # 左スティック上下で前後、右スティック左右で旋回します。
+            # 左スティック上下で前後、左右で旋回します。
             forward_rpm = stick_y_to_rpm(
                 packet.left_y, self.max_rpm, self.deadzone
             )
             turn_rpm = stick_x_to_rpm(
-                packet.right_x, TURN_MAX_RPM, self.deadzone
+                packet.left_x, TURN_MAX_RPM, self.deadzone
             )
             mixed_id1, mixed_id2 = mix_arcade_rpms(
                 forward_rpm, turn_rpm, max(self.max_rpm, TURN_MAX_RPM)
