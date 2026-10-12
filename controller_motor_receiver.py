@@ -32,7 +32,7 @@ OPTIONS_BUTTON_MASK = 0x40
 # STM32のwatchdogは250 msなので、それより十分短い50 ms周期でUSB送信する。
 USB_SEND_INTERVAL_SECONDS = 0.05
 
-# 旋回は走行速度の設定から独立させる。左スティックを左右へ最大まで倒した
+# 旋回は走行速度の設定から独立させる。右スティックを左右へ最大まで倒した
 # ときの旋回入力は常にこの値になる。
 TURN_MAX_RPM = 4000
 
@@ -110,6 +110,12 @@ def stick_x_to_rpm(axis_byte: int, max_rpm: int, deadzone: float) -> int:
     右へ倒すと正、左へ倒すと負、中央付近は0。
     """
 
+    return int(round(stick_x_to_fraction(axis_byte, deadzone) * max_rpm))
+
+
+def stick_x_to_fraction(axis_byte: int, deadzone: float) -> float:
+    """左右入力をデッドゾーン外で再スケーリングして-1～1へ変換する。"""
+
     value = max(0, min(255, int(axis_byte)))
     normalized = max(-1.0, min(1.0, (value - 128) / 127.0))
 
@@ -117,30 +123,35 @@ def stick_x_to_rpm(axis_byte: int, max_rpm: int, deadzone: float) -> int:
         return 0
 
     scaled = (abs(normalized) - deadzone) / (1.0 - deadzone)
-    return int(round(math.copysign(scaled * max_rpm, normalized)))
+    return math.copysign(scaled, normalized)
 
 
 def mix_arcade_rpms(
     forward_rpm: int,
     turn_rpm: int,
     wheel_limit_rpm: int,
+    steering_fraction: float = 0.0,
 ) -> tuple[int, int]:
-    """前後入力と旋回入力を、左輪ID1・右輪ID2へ混合する。
+    """左スティックで内側輪を減速し、右スティックの旋回を合成する。
 
-    左輪 = 前後 + 旋回、右輪 = 前後 - 旋回。
+    steering_fractionが負なら左輪、正なら右輪だけを減速する。
+    最大まで倒すと内側輪は停止し、外側輪は前後の回転数を保つ。
+    右スティックの旋回入力は左輪に加算、右輪から減算する。
     合成後に最大値を超えた場合は、左右の比率を保ったまま縮小する。
+    戻り値は物理的な左輪・右輪の順で、CAN IDと符号は呼び出し側で変換する。
     """
 
-    rpm_id1 = forward_rpm + turn_rpm
-    rpm_id2 = forward_rpm - turn_rpm
-    largest = max(abs(rpm_id1), abs(rpm_id2))
+    steering = max(-1.0, min(1.0, steering_fraction))
+    left_rpm = int(round(forward_rpm * (1.0 + min(0.0, steering)))) + turn_rpm
+    right_rpm = int(round(forward_rpm * (1.0 - max(0.0, steering)))) - turn_rpm
+    largest = max(abs(left_rpm), abs(right_rpm))
 
     if largest > wheel_limit_rpm:
         scale = wheel_limit_rpm / largest
-        rpm_id1 = int(round(rpm_id1 * scale))
-        rpm_id2 = int(round(rpm_id2 * scale))
+        left_rpm = int(round(left_rpm * scale))
+        right_rpm = int(round(right_rpm * scale))
 
-    return rpm_id1, rpm_id2
+    return left_rpm, right_rpm
 
 
 class MotorCommandState:
@@ -176,19 +187,20 @@ class MotorCommandState:
         if self.emergency_stopped:
             self.stop()
         else:
-            # 左スティック上下で前後、左右で旋回します。
+            # 左スティック上下で前後、左右で内側輪だけ減速します。
             forward_rpm = stick_y_to_rpm(
                 packet.left_y, self.max_rpm, self.deadzone
             )
             turn_rpm = stick_x_to_rpm(
-                packet.left_x, TURN_MAX_RPM, self.deadzone
+                packet.right_x, TURN_MAX_RPM, self.deadzone
             )
-            mixed_id1, mixed_id2 = mix_arcade_rpms(
-                forward_rpm, turn_rpm, max(self.max_rpm, TURN_MAX_RPM)
+            left_rpm, right_rpm = mix_arcade_rpms(
+                forward_rpm, turn_rpm, max(self.max_rpm, TURN_MAX_RPM),
+                steering_fraction=stick_x_to_fraction(packet.left_x, self.deadzone),
             )
 
             # 実機のCAN ID配置が左右逆なので、ID1/ID2を入れ替えて送る。
-            self.rpm_id1, self.rpm_id2 = mixed_id2, mixed_id1
+            self.rpm_id1, self.rpm_id2 = right_rpm, left_rpm
 
             # 対向二輪は取付方向によって片側だけ符号反転が必要になります。
             if self.invert_id1:
