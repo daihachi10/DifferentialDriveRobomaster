@@ -194,9 +194,11 @@ class MotorCommandState:
             turn_rpm = stick_x_to_rpm(
                 packet.right_x, TURN_MAX_RPM, self.deadzone
             )
+            # コントローラーの左右方向を実機に合わせて反転する。
+            turn_rpm = -turn_rpm
             left_rpm, right_rpm = mix_arcade_rpms(
                 forward_rpm, turn_rpm, max(self.max_rpm, TURN_MAX_RPM),
-                steering_fraction=stick_x_to_fraction(packet.left_x, self.deadzone),
+                steering_fraction=-stick_x_to_fraction(packet.left_x, self.deadzone),
             )
 
             # 実機のCAN ID配置が左右逆なので、ID1/ID2を入れ替えて送る。
